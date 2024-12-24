@@ -1,0 +1,382 @@
+/* 全局样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    background-color: #f5f5f5;
+}
+
+/* 导航栏 */
+.main-nav {
+    background-color: #2c3e50;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+}
+
+.nav-logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+    background-color: #34495e;
+}
+
+/* 主要内容区域 */
+.main-content {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+/* 按钮样式 */
+.btn {
+    background-color: #3498db;
+    color: white;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.btn:hover {
+    background-color: #2980b9;
+}
+
+/* 上传区 */
+.upload-area {
+    border: 3px dashed #bdc3c7;
+    padding: 2rem;
+    text-align: center;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    background-color: white;
+}
+
+.upload-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+/* 进度条样式 */
+.progress-bar {
+    height: 4px;
+    background-color: #ecf0f1;
+    margin: 1rem 0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress {
+    height: 100%;
+    background-color: #2ecc71;
+    width: 0;
+    transition: width 0.3s;
+}
+
+/* 列表容器样式 */
+.list-container {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* 表单样式 */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* 输出容器样式 */
+.output-container {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.output-content {
+    background-color: #2b2b2b;
+    color: #fff;
+    padding: 1rem;
+    border-radius: 4px;
+    font-family: monospace;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* 在现有样式后加 */
+.upload-actions {
+    margin: 1rem 0;
+    text-align: center;
+}
+
+.status-message {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    display: none;
+}
+
+.status-message.info {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    display: block;
+}
+
+.status-message.success {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    display: block;
+}
+
+.status-message.error {
+    background-color: #ffebee;
+    color: #c62828;
+    display: block;
+}
+
+.project-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #eee;
+}
+
+.project-item:last-child {
+    border-bottom: none;
+}
+
+.project-info {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.project-id {
+    font-family: monospace;
+    color: #666;
+}
+
+.project-name {
+    font-weight: bold;
+}
+
+.project-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.delete-btn {
+    background-color: #dc3545;
+}
+
+.delete-btn:hover {
+    background-color: #c82333;
+}
+
+/* 项目表单样式 */
+.project-form {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.project-form textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+.form-actions {
+    margin-top: 1rem;
+    text-align: right;
+}
+
+/* 已选文件显示 */
+.selected-files {
+    margin-top: 1rem;
+}
+
+.selected-file {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.file-size {
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* 项目列表样式 */
+.project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.project-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.project-description {
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.project-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.file-badge {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.file-badge.python {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+/* 项目来源选择器 */
+.source-selector {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.source-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.source-option input[type="radio"] {
+    margin: 0;
+}
+
+.source-section {
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+#gitSection .form-group {
+    margin-bottom: 1rem;
+}
+
+#gitSection input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Git 信息显示 */
+.git-info {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    font-family: monospace;
+    color: #666;
+}
+
+.git-url, .git-branch {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.project-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* 源选择器样式优化 */
+.source-selector {
+    background: #f8f9fa;
+    padding: 0.5rem;
+    border-radius: 4px;
+    display: flex;
+    gap: 2rem;
+}
+
+.source-option {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.source-option:hover {
+    background: #e9ecef;
+}
+
+.source-option input[type="radio"]:checked + span {
+    color: #2196f3;
+    font-weight: bold;
+} 

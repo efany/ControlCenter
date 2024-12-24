@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目运行 - Python项目管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-logo">Python项目管理系统</div>
+        <ul class="nav-links">
+            <li><a href="/projects">项目管理</a></li>
+            <li><a href="/runner" class="active">项目运行</a></li>
+            <li><a href="/records">运行记录</a></li>
+            <li><a href="/scheduler">任务配置</a></li>
+        </ul>
+    </nav>
+    <div class="main-content">
+        <h1>项目运行</h1>
+        <div class="runner-container">
+            <div class="project-selector">
+                <h2>选择项目</h2>
+                <div class="projects-list" id="projectsList">
+                    <!-- 项目列表将通过JavaScript动态生成 -->
+                </div>
+            </div>
+            <div class="run-options">
+                <h2>运行命令</h2>
+                <div class="options-form">
+                    <div class="form-group">
+                        <label>完整命令：</label>
+                        <input type="text" id="command" placeholder="例如: python main.py --arg1 value1" class="command-input">
+                        <div class="command-help">在项目根目录下执行命令</div>
+                    </div>
+                    <button id="runBtn" class="btn" disabled>运行项目</button>
+                </div>
+            </div>
+            <div class="output-container">
+                <h2>运行输出</h2>
+                <div class="output-content" id="output"></div>
+                <div class="output-actions">
+                    <button id="downloadBtn" class="btn" disabled>下载结果</button>
+                    <button id="clearBtn" class="btn">清除输出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const projectsList = document.getElementById('projectsList');
+        const runBtn = document.getElementById('runBtn');
+        const commandInput = document.getElementById('command');
+        const output = document.getElementById('output');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const clearBtn = document.getElementById('clearBtn');
+
+        let selectedProject = null;
+
+        // 加载项目列表
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const result = await response.json();
+                
+                projectsList.innerHTML = result.projects.map(project => `
+                    <div class="project-card ${selectedProject?.id === project.id ? 'selected' : ''}" 
+                         onclick="selectProject('${project.id}', this)">
+                        <div class="project-header">
+                            <span class="project-title">${project.title}</span>
+                            <span class="project-id">${project.id}</span>
+                        </div>
+                        ${project.description ? `
+                            <div class="project-description">${project.description}</div>
+                        ` : ''}
+                        <div class="project-type">
+                            ${project.source_type === 'git' ? 
+                                `<span class="source-badge git">Git仓库: ${project.repo_name}</span>` : 
+                                '<span class="source-badge files">本地文件</span>'
+                            }
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('加载项目列表失败:', error);
+            }
+        }
+
+        // 选择项目
+        function selectProject(projectId, element) {
+            // 移除其他项目的选中状态
+            document.querySelectorAll('.project-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // 添加选中状态
+            element.classList.add('selected');
+            selectedProject = { id: projectId };
+            
+            // 启用运行按钮和命令输入
+            commandInput.disabled = false;
+            updateRunButton();
+        }
+
+        // 更新运行按钮状态
+        function updateRunButton() {
+            runBtn.disabled = !selectedProject || !commandInput.value.trim();
+        }
+
+        // 监听命令输入
+        commandInput.addEventListener('input', updateRunButton);
+
+        // 运行项目
+        runBtn.addEventListener('click', async () => {
+            if (!selectedProject || !commandInput.value.trim()) return;
+
+            const command = commandInput.value.trim();
+            output.textContent = '运行中...\n';
+            runBtn.disabled = true;
+            downloadBtn.disabled = true;
+            
+            try {
+                const response = await fetch(`/api/run/${selectedProject.id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ command })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                output.textContent = '';  // 清除"运行中..."的提示
+                
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const text = decoder.decode(value);
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.type === 'end') {
+                                // 运行结束
+                                runBtn.disabled = false;
+                                const status = data.returncode === 0 ? '成功' : '失败';
+                                const statusLine = document.createElement('div');
+                                statusLine.className = data.returncode === 0 ? 'success-line' : 'error-line';
+                                statusLine.textContent = `\n运行${status}，耗时：${data.duration.toFixed(2)}秒`;
+                                output.appendChild(statusLine);
+                            } else {
+                                // 添加输出行
+                                const lineElem = document.createElement('div');
+                                lineElem.className = data.type === 'stderr' ? 'error-line' : 'output-line';
+                                lineElem.textContent = data.line;
+                                output.appendChild(lineElem);
+                                output.scrollTop = output.scrollHeight;
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                const errorLine = document.createElement('div');
+                errorLine.className = 'error-line';
+                errorLine.textContent = '错误：' + error.message;
+                output.appendChild(errorLine);
+                runBtn.disabled = false;
+            }
+        });
+
+        // 清除输出
+        clearBtn.addEventListener('click', () => {
+            output.textContent = '';
+            downloadBtn.disabled = true;
+        });
+
+        // 初始加载
+        loadProjects();
+    </script>
+
+    <style>
+        .runner-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 1.5rem;
+        }
+
+        .project-selector {
+            grid-row: 1 / 3;
+        }
+
+        .projects-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .project-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .project-card.selected {
+            border: 2px solid #2196f3;
+        }
+
+        .source-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-top: 0.5rem;
+        }
+
+        .source-badge.git {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .source-badge.files {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .command-input {
+            font-family: monospace;
+            font-size: 1em;
+            padding: 0.75rem;
+        }
+
+        .command-help {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .project-type {
+            margin-top: 0.5rem;
+        }
+
+        .output-content {
+            background: #1e1e1e;
+            color: #fff;
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: monospace;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .output-line {
+            color: #d4d4d4;
+        }
+
+        .error-line {
+            color: #ff6b6b;
+        }
+
+        .success-line {
+            color: #69db7c;
+        }
+    </style>
+</body>
+</html> 

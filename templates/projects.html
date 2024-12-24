@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目管理 - Python项目管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-logo">Python项目管理系统</div>
+        <ul class="nav-links">
+            <li><a href="/projects" class="active">项目管理</a></li>
+            <li><a href="/runner">项目运行</a></li>
+            <li><a href="/records">运行记录</a></li>
+            <li><a href="/scheduler">任务配置</a></li>
+        </ul>
+    </nav>
+    <div class="main-content">
+        <h1>项目管理</h1>
+        <div class="create-project">
+            <h2>创建新项目</h2>
+            <form id="projectForm" class="project-form">
+                <div class="form-group">
+                    <label for="projectTitle">项目标题：</label>
+                    <input type="text" id="projectTitle" required placeholder="输入项目标题">
+                </div>
+                <div class="form-group">
+                    <label for="projectDesc">项目描述：</label>
+                    <textarea id="projectDesc" rows="3" placeholder="输入项目描述"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>项目来源：</label>
+                    <div class="source-selector">
+                        <label class="source-option">
+                            <input type="radio" name="projectSource" value="files" checked>
+                            <span>文件上传</span>
+                        </label>
+                        <label class="source-option">
+                            <input type="radio" name="projectSource" value="git">
+                            <span>Git仓库</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="fileUploadSection" class="source-section">
+                    <div class="upload-section">
+                        <div class="upload-area" id="dropZone">
+                            <div class="upload-icon">📁</div>
+                            <div class="upload-text">拖拽文件到此处或点击选择文件</div>
+                            <div class="file-types">支持的文件类型: .py, .zip, .rar, .tar.gz, .7z</div>
+                            <input type="file" id="fileInput" multiple accept=".py,.zip,.rar,.tar.gz,.7z">
+                        </div>
+                        <div class="selected-files" id="selectedFiles"></div>
+                    </div>
+                </div>
+                <div id="gitSection" class="source-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="gitUrl">Git仓库地址：</label>
+                        <input type="url" id="gitUrl" placeholder="https://github.com/username/repo.git">
+                    </div>
+                    <div class="form-group">
+                        <label for="gitBranch">分支：</label>
+                        <input type="text" id="gitBranch" placeholder="main" value="main">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="createBtn" class="btn" disabled>创建项目</button>
+                </div>
+            </form>
+            <div class="progress-bar">
+                <div class="progress"></div>
+            </div>
+            <div class="status-message"></div>
+        </div>
+        <div class="projects-list">
+            <h2>项目列表</h2>
+            <div class="list-container" id="projectsList"></div>
+        </div>
+    </div>
+
+    <script>
+        const projectForm = document.getElementById('projectForm');
+        const projectTitle = document.getElementById('projectTitle');
+        const projectDesc = document.getElementById('projectDesc');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const createBtn = document.getElementById('createBtn');
+        const selectedFiles = document.getElementById('selectedFiles');
+        const progressBar = document.querySelector('.progress');
+        const statusMessage = document.querySelector('.status-message');
+        const projectsList = document.getElementById('projectsList');
+        const projectSource = document.getElementsByName('projectSource');
+        const fileUploadSection = document.getElementById('fileUploadSection');
+        const gitSection = document.getElementById('gitSection');
+        const gitUrl = document.getElementById('gitUrl');
+        const gitBranch = document.getElementById('gitBranch');
+
+        // 生成12位项目ID
+        function generateProjectId() {
+            const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            let result = '';
+            for (let i = 0; i < 12; i++) {
+                result += chars[Math.floor(Math.random() * chars.length)];
+            }
+            return result;
+        }
+
+        // 更新选中文件显示
+        function updateSelectedFiles() {
+            const files = fileInput.files;
+            if (files.length > 0) {
+                selectedFiles.innerHTML = Array.from(files).map(file => `
+                    <div class="selected-file">
+                        <span class="file-name">${file.name}</span>
+                        <span class="file-size">(${formatFileSize(file.size)})</span>
+                    </div>
+                `).join('');
+                createBtn.disabled = !projectTitle.value;
+            } else {
+                selectedFiles.innerHTML = '';
+                createBtn.disabled = true;
+            }
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 文件选择处理
+        fileInput.addEventListener('change', updateSelectedFiles);
+        projectTitle.addEventListener('input', () => {
+            createBtn.disabled = !projectTitle.value || fileInput.files.length === 0;
+        });
+
+        // 拖放处理
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('drag-over');
+            });
+        });
+
+        dropZone.addEventListener('drop', handleDrop);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            updateSelectedFiles();
+        }
+
+        // 切换项目来源
+        projectSource.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (radio.value === 'files') {
+                    fileUploadSection.style.display = 'block';
+                    gitSection.style.display = 'none';
+                    // 文件上传模式下，根据是否有文件和标题来决定按钮���态
+                    createBtn.disabled = !projectTitle.value || fileInput.files.length === 0;
+                } else {
+                    fileUploadSection.style.display = 'none';
+                    gitSection.style.display = 'block';
+                    // Git模式下，根据是否有仓库地址和标题来决定按钮状态
+                    createBtn.disabled = !projectTitle.value || !gitUrl.value;
+                }
+            });
+        });
+
+        // 监听输入变化
+        projectTitle.addEventListener('input', updateCreateButtonState);
+        gitUrl.addEventListener('input', updateCreateButtonState);
+
+        function updateCreateButtonState() {
+            const sourceType = document.querySelector('input[name="projectSource"]:checked').value;
+            if (sourceType === 'files') {
+                createBtn.disabled = !projectTitle.value || fileInput.files.length === 0;
+            } else {
+                createBtn.disabled = !projectTitle.value || !gitUrl.value;
+            }
+        }
+
+        // 修改表单提交处理
+        projectForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const sourceType = document.querySelector('input[name="projectSource"]:checked').value;
+            
+            if (!projectTitle.value) return;
+            if (sourceType === 'files' && fileInput.files.length === 0) return;
+            if (sourceType === 'git' && !gitUrl.value) return;
+
+            const projectId = generateProjectId();
+            const formData = new FormData();
+            
+            formData.append('projectId', projectId);
+            formData.append('title', projectTitle.value);
+            formData.append('description', projectDesc.value);
+            formData.append('sourceType', sourceType);
+
+            if (sourceType === 'git') {
+                formData.append('gitUrl', gitUrl.value);
+                formData.append('gitBranch', gitBranch.value || 'main');
+            } else {
+                Array.from(fileInput.files).forEach(file => {
+                    formData.append('files', file);
+                });
+            }
+
+            createBtn.disabled = true;
+            progressBar.style.width = '0%';
+            statusMessage.textContent = sourceType === 'git' ? '克隆仓库中...' : '上传文件中...';
+            statusMessage.className = 'status-message info';
+
+            try {
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusMessage.textContent = '项目创建成功！';
+                    statusMessage.className = 'status-message success';
+                    projectForm.reset();
+                    selectedFiles.innerHTML = '';
+                    fileUploadSection.style.display = 'block';
+                    gitSection.style.display = 'none';
+                    loadProjects();
+                } else {
+                    throw new Error(result.error || '创建失败');
+                }
+            } catch (error) {
+                statusMessage.textContent = error.message;
+                statusMessage.className = 'status-message error';
+            } finally {
+                createBtn.disabled = false;
+            }
+        });
+
+        // 加载项目列表
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const result = await response.json();
+                
+                projectsList.innerHTML = result.projects.map(project => `
+                    <div class="project-item">
+                        <div class="project-info">
+                            <div class="project-header">
+                                <span class="project-title">${project.title}</span>
+                                <span class="project-id">${project.id}</span>
+                            </div>
+                            ${project.description ? `
+                                <div class="project-description">${project.description}</div>
+                            ` : ''}
+                            <div class="project-meta">
+                                ${project.source_type === 'git' ? `
+                                    <div class="git-info">
+                                        <span class="git-url">📦 ${project.git_url}</span>
+                                        <span class="git-branch">🔖 ${project.git_branch}</span>
+                                    </div>
+                                ` : ''}
+                                <div class="project-files">
+                                    ${(project.files || []).map(file => `
+                                        <span class="file-badge${file.endsWith('.py') ? ' python' : ''}">${file}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="project-actions">
+                            <button onclick="deleteProject('${project.id}')" class="btn delete-btn">删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('加载项目列表失败:', error);
+            }
+        }
+
+        // 删除项目
+        async function deleteProject(projectId) {
+            if (!confirm('确定要删除这个项目吗？')) return;
+
+            try {
+                const response = await fetch(`/api/projects/${projectId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    loadProjects();
+                } else {
+                    throw new Error('删除失败');
+                }
+            } catch (error) {
+                alert('删除项目失败: ' + error.message);
+            }
+        }
+
+        // 初始加载
+        loadProjects();
+    </script>
+</body>
+</html> 

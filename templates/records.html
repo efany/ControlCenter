@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运行记录 - Python项目管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-logo">Python项目管理系统</div>
+        <ul class="nav-links">
+            <li><a href="/projects">项目管理</a></li>
+            <li><a href="/runner">项目运行</a></li>
+            <li><a href="/records" class="active">运行记录</a></li>
+            <li><a href="/scheduler">任务配置</a></li>
+        </ul>
+    </nav>
+    <div class="main-content">
+        <h1>运行记录</h1>
+        <div class="records-container">
+            <div class="records-list" id="recordsList">
+                <!-- 记录将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const recordsList = document.getElementById('recordsList');
+
+        // 格式化时间
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 格式化持续时间
+        function formatDuration(seconds) {
+            if (!seconds) return '未知';
+            if (seconds < 1) {
+                return `${(seconds * 1000).toFixed(0)}ms`;
+            }
+            return `${seconds.toFixed(2)}s`;
+        }
+
+        // 删除记录
+        async function deleteRecord(recordId) {
+            if (!confirm('确定要删除这条运行记录吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/records/${recordId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // 重新加载记录列表
+                    loadRecords();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || '删除失败');
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // 加载运行记录
+        async function loadRecords() {
+            try {
+                const response = await fetch('/api/records');
+                const result = await response.json();
+                
+                if (result.records.length === 0) {
+                    recordsList.innerHTML = `
+                        <div class="no-records">
+                            暂无运行记录
+                        </div>
+                    `;
+                    return;
+                }
+
+                recordsList.innerHTML = result.records.map(record => `
+                    <div class="record-card ${record.status}">
+                        <div class="record-header">
+                            <div class="record-title">
+                                <span class="project-title">${record.project_title}</span>
+                                <span class="status-badge ${record.status}">
+                                    ${record.status === 'success' ? '成功' : '失败'}
+                                </span>
+                                ${record.running_status === 'running' ? 
+                                    '<span class="running-badge">运行中</span>' : ''}
+                            </div>
+                            <div class="record-actions">
+                                ${record.output_file ? `
+                                    <a href="/api/records/${record.output_file}/download" 
+                                       class="btn download-btn">下载产物</a>
+                                    <a href="/downloads/${record.output_file}/log/execution.log" 
+                                       class="btn download-btn" target="_blank">查看日志</a>
+                                    <a href="/downloads/${record.output_file}/output" 
+                                       class="btn download-btn" target="_blank">查看输出</a>
+                                ` : ''}
+                                <button onclick="deleteRecord(${record.id})" class="btn delete-btn">删除</button>
+                            </div>
+                        </div>
+                        <div class="record-content">
+                            <div class="command-section">
+                                <span class="command-label">命令：</span>
+                                <code>${record.command}</code>
+                            </div>
+                            <div class="record-details">
+                                <div class="record-info">
+                                    <div class="info-item">
+                                        <span class="info-label">运行时间：</span>
+                                        <span>${formatDate(record.created_at)}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="info-label">耗时：</span>
+                                        <span>${formatDuration(record.duration)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                recordsList.innerHTML = `
+                    <div class="error-message">
+                        加载记录失败: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // 初始加载
+        loadRecords();
+
+        // 每30秒刷新一次
+        setInterval(loadRecords, 30000);
+    </script>
+
+    <style>
+        .record-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .record-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .record-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        .running-badge {
+            background-color: #2196f3;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-left: 0.5rem;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .download-btn {
+            background-color: #28a745;
+        }
+        
+        .download-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</body>
+</html> 
