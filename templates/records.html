@@ -108,6 +108,9 @@
                                     <a href="/downloads/${record.output_file}/output" 
                                        class="btn download-btn" target="_blank">查看输出</a>
                                 ` : ''}
+                                ${record.running_status === 'running' ? `
+                                    <button onclick="terminateRecord(${record.id})" class="btn terminate-btn">终止</button>
+                                ` : ''}
                                 <button onclick="deleteRecord(${record.id})" class="btn delete-btn">删除</button>
                             </div>
                         </div>
@@ -145,6 +148,28 @@
 
         // 每30秒刷新一次
         setInterval(loadRecords, 30000);
+
+        async function terminateRecord(recordId) {
+            if (!confirm('确定要终止这个任务吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/records/${recordId}/terminate`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    alert('任务已终止');
+                    loadRecords();  // Reload the records list
+                } else {
+                    const data = await response.json();
+                    alert(data.error || '终止失败');
+                }
+            } catch (error) {
+                alert('终止失败: ' + error.message);
+            }
+        }
     </script>
 
     <style>
@@ -204,6 +229,14 @@
         
         .download-btn:hover {
             background-color: #218838;
+        }
+
+        .terminate-btn {
+            background-color: #ff9800;
+        }
+
+        .terminate-btn:hover {
+            background-color: #f57c00;
         }
     </style>
 </body>

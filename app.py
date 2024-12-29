@@ -23,6 +23,8 @@ import time
 import fcntl
 import select
 from io import BytesIO
+import signal
+import pytz
 
 app = Flask(__name__)
 
@@ -57,6 +59,16 @@ DB_CONFIG = {
     'charset': 'utf8mb4',
     'cursorclass': DictCursor
 }
+
+# Store running processes in a dictionary
+running_processes = {}
+
+# Define the Beijing timezone
+beijing_tz = pytz.timezone('Asia/Shanghai')
+
+def get_current_time():
+    """Get the current time in Beijing timezone."""
+    return datetime.now(beijing_tz)
 
 def get_db():
     return pymysql.connect(**DB_CONFIG)
@@ -671,7 +683,7 @@ def tail_file(filename):
 @app.route('/api/run/<project_id>', methods=['POST'])
 def api_run_project(project_id):
     try:
-        start_time = datetime.now()
+        start_time = get_current_time()
         command = request.json.get('command', '').strip()
         if not command:
             return jsonify({'error': 'Command is required'}), 400
@@ -741,21 +753,7 @@ def api_run_project(project_id):
             with conn.cursor() as cursor:
                 # 将命令列表转换为字符串以存储
                 command_str = ' '.join(str(x) for x in full_command)
-                cursor.execute('''
-                    INSERT INTO run_records (
-                        project_id, project_title, command, working_directory,
-                        status, running_status, output_file, duration
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ''', (
-                    project_id,
-                    project_info['title'],
-                    command_str,  # 存储完整命令字符串
-                    work_dir,
-                    'pending',
-                    'running',
-                    run_id,
-                    0.0  # 初始持续时间为0.0
-                ))
+                insert_run_record(cursor, project_id, project_info['title'], command_str, work_dir, run_id)
                 record_id = cursor.lastrowid
             conn.commit()
         except Exception as e:
@@ -766,10 +764,10 @@ def api_run_project(project_id):
 
         def generate():
             try:
-                # 启动进程，不使用shell=True
+                # Start the process
                 process = subprocess.Popen(
                     full_command,
-                    shell=False,  # 直接使用参数列表
+                    shell=False,
                     cwd=work_dir,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -777,6 +775,9 @@ def api_run_project(project_id):
                     bufsize=1,
                     universal_newlines=True
                 )
+
+                # Store the process in the running_processes dictionary
+                running_processes[record_id] = process
 
                 # 创建日志文件并开始写入
                 with open(log_file, 'w', encoding='utf-8') as f:
@@ -822,11 +823,11 @@ def api_run_project(project_id):
                     if process.poll() is not None and not readable:
                         break
 
-                # 等待进程结束
+                # Wait for the process to finish
                 process.wait()
                 duration = (datetime.now() - start_time).total_seconds()
 
-                # 更新运行记录状态
+                # Update the run record status
                 conn = get_db()
                 try:
                     with conn.cursor() as cursor:
@@ -848,11 +849,14 @@ def api_run_project(project_id):
                 finally:
                     conn.close()
 
-                # 发送完成消息
+                # Send completion message
                 yield f"data: {json.dumps({'type': 'end', 'returncode': process.returncode, 'duration': duration})}\n\n"
 
             except Exception as e:
-                # 更新为错误状态
+                # Handle exceptions and update the database
+                # ... existing exception handling code ...
+
+                # Update the run record status
                 conn = get_db()
                 try:
                     with conn.cursor() as cursor:
@@ -984,6 +988,59 @@ def api_download_run_output(run_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/records/<int:record_id>/terminate', methods=['POST'])
+def api_terminate_record(record_id):
+    """Terminate a running task."""
+    try:
+        # Check if the process is running
+        if record_id in running_processes:
+            process = running_processes[record_id]
+            process.terminate()  # Send termination signal
+            process.wait()  # Wait for the process to terminate
+
+            # Update the run record status
+            conn = get_db()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute('''
+                        UPDATE run_records 
+                        SET status = 'terminated', 
+                            running_status = 'completed'
+                        WHERE id = %s
+                    ''', (record_id,))
+                conn.commit()
+            finally:
+                conn.close()
+
+            # Remove the process from the running list
+            del running_processes[record_id]
+
+            return jsonify({'message': 'Task terminated successfully'})
+        else:
+            return jsonify({'error': 'Task not running or already completed'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def insert_run_record(cursor, project_id, project_title, command_str, work_dir, run_id):
+    created_at = get_current_time()
+    cursor.execute('''
+        INSERT INTO run_records (
+            project_id, project_title, command, working_directory,
+            status, running_status, output_file, duration, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ''', (
+        project_id,
+        project_title,
+        command_str,
+        work_dir,
+        'pending',
+        'running',
+        run_id,
+        0.0,
+        created_at
+    ))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000) 
