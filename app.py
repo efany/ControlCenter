@@ -687,18 +687,18 @@ def api_run_project(project_id):
         command = request.json.get('command', '').strip()
         if not command:
             return jsonify({'error': 'Command is required'}), 400
-
-        # 生成运行ID和目录
-        run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{project_id}"
-        run_base_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], run_id)
-        log_dir = os.path.join(run_base_dir, 'log')
-        output_dir = os.path.join(os.path.abspath(run_base_dir), 'output')  # 使用绝对路径
         
-        # 创建目录
+        # Generate run ID and directories
+        run_id = f"run_{start_time.strftime('%Y%m%d_%H%M%S')}_{project_id}"
+        run_base_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], run_id)
+        log_dir = os.path.join(os.path.abspath(run_base_dir), 'log')
+        output_dir = os.path.join(os.path.abspath(run_base_dir), 'output')
+        
+        # Create directories
         os.makedirs(log_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 
-        # 获取项目信息
+        # Get project info
         conn = get_db()
         try:
             with conn.cursor() as cursor:
@@ -709,7 +709,7 @@ def api_run_project(project_id):
         finally:
             conn.close()
 
-        # 确定工作目录
+        # Determine working directory
         project_dir = os.path.join(app.config['UPLOAD_FOLDER'], project_id)
         if not os.path.exists(project_dir):
             return jsonify({'error': 'Project directory not found'}), 404
@@ -718,34 +718,38 @@ def api_run_project(project_id):
         if not os.path.exists(work_dir):
             return jsonify({'error': 'Working directory not found'}), 404
 
-        # 构建完整的命令
-        # 分离Python文件路径和参数
+        # Construct the full command
         command_parts = command.split()
-        
         if not command_parts:
             return jsonify({'error': 'No Python file specified'}), 400
 
-        python_file = command_parts[1]  # 第一个部分是Python文件
+        python_file = command_parts[1]  # First part is the Python file
         if len(command_parts) > 2:
-            args = command_parts[2:]  # 剩余部分是参数
+            args = command_parts[2:]  # Remaining parts are arguments
         else:
             args = []
 
-        # 构建完整命令，使用绝对路径
+        # Build the full command using absolute paths
         full_command = [sys.executable, python_file]
         if '--output_dir' in args:
-            # 如果命令中已经有 output_dir，替换为绝对路径
+            # If output_dir is already in the command, replace it with the absolute path
             output_index = args.index('--output_dir')
             if output_index + 1 < len(args):
                 args[output_index + 1] = output_dir
         else:
-            # 如果没有，添加 output_dir 参数
+            # If not, add the output_dir argument
             full_command.extend(['--output_dir', output_dir])
+
+        if '--log_dir' in args:
+            # 如果命令中已经有 log_dir，替换为绝对路径
+            log_index = args.index('--log_dir')
+            if log_index + 1 < len(args):
+                args[log_index + 1] = log_dir
+        else:
+            # 如果没有，添加 log_dir 参数
+            full_command.extend(['--log_dir', log_dir])
         
         full_command.extend(args)
-
-        # 创建日志文件
-        log_file = os.path.join(log_dir, 'execution.log')
 
         # 先创建运行记录，状态为 running
         conn = get_db()
@@ -762,9 +766,9 @@ def api_run_project(project_id):
         finally:
             conn.close()
 
-        def generate():
+        # Define the function to run in a background thread
+        def run_command():
             try:
-                # Start the process
                 process = subprocess.Popen(
                     full_command,
                     shell=False,
@@ -779,53 +783,9 @@ def api_run_project(project_id):
                 # Store the process in the running_processes dictionary
                 running_processes[record_id] = process
 
-                # 创建日志文件并开始写入
-                with open(log_file, 'w', encoding='utf-8') as f:
-                    f.write(f"=== COMMAND ===\n{full_command}\n")
-                    f.write(f"=== WORKING DIRECTORY ===\n{work_dir}\n\n")
-                    f.write("=== OUTPUT ===\n")
-                    f.flush()
-
-                # 设置非阻塞模式
-                for pipe in [process.stdout, process.stderr]:
-                    fd = pipe.fileno()
-                    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-                    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-
-                # 准备select的文件描述符
-                read_set = [process.stdout, process.stderr]
-                
-                while read_set:
-                    # 使用select监控输出
-                    try:
-                        readable, _, _ = select.select(read_set, [], [], 0.1)
-                    except select.error:
-                        break
-
-                    for pipe in readable:
-                        line = pipe.readline()
-                        if not line:
-                            read_set.remove(pipe)
-                            continue
-
-                        # 确定输出类型
-                        stream_type = 'stderr' if pipe == process.stderr else 'stdout'
-                        
-                        # 写入日志文件
-                        with open(log_file, 'a', encoding='utf-8') as f:
-                            f.write(line)
-                            f.flush()
-                        
-                        # 立即发送到客户端
-                        yield f"data: {json.dumps({'type': stream_type, 'line': line})}\n\n"
-
-                    # 检查进程是否结束
-                    if process.poll() is not None and not readable:
-                        break
-
                 # Wait for the process to finish
                 process.wait()
-                duration = (datetime.now() - start_time).total_seconds()
+                duration = (get_current_time() - start_time).total_seconds()
 
                 # Update the run record status
                 conn = get_db()
@@ -839,7 +799,7 @@ def api_run_project(project_id):
                             WHERE id = %s
                         ''', (
                             'success' if process.returncode == 0 else 'error',
-                            float(duration),  # 确保是浮点数
+                            float(duration),
                             record_id
                         ))
                     conn.commit()
@@ -849,14 +809,8 @@ def api_run_project(project_id):
                 finally:
                     conn.close()
 
-                # Send completion message
-                yield f"data: {json.dumps({'type': 'end', 'returncode': process.returncode, 'duration': duration})}\n\n"
-
             except Exception as e:
                 # Handle exceptions and update the database
-                # ... existing exception handling code ...
-
-                # Update the run record status
                 conn = get_db()
                 try:
                     with conn.cursor() as cursor:
@@ -867,7 +821,7 @@ def api_run_project(project_id):
                                 duration = %s
                             WHERE id = %s
                         ''', (
-                            float((datetime.now() - start_time).total_seconds()),
+                            float((get_current_time() - start_time).total_seconds()),
                             record_id
                         ))
                     conn.commit()
@@ -877,15 +831,15 @@ def api_run_project(project_id):
                 finally:
                     conn.close()
 
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        # Start the command in a background thread
+        thread = threading.Thread(target=run_command)
+        thread.start()
 
-        return Response(
-            stream_with_context(generate()),
-            mimetype='text/event-stream'
-        )
+        # Return the run_id in the response
+        return jsonify({'message': 'Command started successfully', 'run_id': run_id}), 200
 
     except Exception as e:
-        # 如果在创建记录后发生错误，更新记录状态
+        # If an error occurs after creating the record, update the record status
         if 'record_id' in locals():
             conn = get_db()
             try:
@@ -897,7 +851,7 @@ def api_run_project(project_id):
                             duration = %s
                         WHERE id = %s
                     ''', (
-                        float((datetime.now() - start_time).total_seconds()),
+                        float((get_current_time() - start_time).total_seconds()),
                         record_id
                     ))
                 conn.commit()
@@ -1041,6 +995,42 @@ def insert_run_record(cursor, project_id, project_title, command_str, work_dir, 
         0.0,
         created_at
     ))
+
+@app.route('/api/logs/<project_id>', methods=['GET'])
+def stream_logs(project_id):
+    """Stream the log file content for a given project."""
+    try:
+        # Determine the log file path
+        run_id = request.args.get('run_id')
+        run_base_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], run_id)
+        log_dir = os.path.join(os.path.abspath(run_base_dir), 'log')
+        log_file_path = os.path.join(log_dir, 'app.log')
+        
+        # Retry mechanism to wait for the log file to be created
+        max_retries = 10
+        retries = 0
+        while not os.path.exists(log_file_path) and retries < max_retries:
+            time.sleep(1)  # Wait for 1 second before retrying
+            retries += 1
+
+        if not os.path.exists(log_file_path):
+            return jsonify({'error': 'Log file not found', 'log_file_path': log_file_path}), 404
+
+        def generate():
+            with open(log_file_path, 'r', encoding='utf-8') as log_file:
+                # Move to the end of the file
+                log_file.seek(0, os.SEEK_END)
+                while True:
+                    line = log_file.readline()
+                    if line:
+                        yield f"data: {line}\n\n"
+                    else:
+                        time.sleep(1)  # Sleep briefly to avoid busy-waiting
+
+        return Response(generate(), mimetype='text/event-stream')
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000) 

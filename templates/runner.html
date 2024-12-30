@@ -36,13 +36,9 @@
                     <button id="runBtn" class="btn" disabled>运行项目</button>
                 </div>
             </div>
-            <div class="output-container">
-                <h2>运行输出</h2>
-                <div class="output-content" id="output"></div>
-                <div class="output-actions">
-                    <button id="downloadBtn" class="btn" disabled>下载结果</button>
-                    <button id="clearBtn" class="btn">清除输出</button>
-                </div>
+            <div class="log-container">
+                <h2>实时日志</h2>
+                <div class="log-content" id="logOutput"></div>
             </div>
         </div>
     </div>
@@ -51,16 +47,19 @@
         const projectsList = document.getElementById('projectsList');
         const runBtn = document.getElementById('runBtn');
         const commandInput = document.getElementById('command');
-        const output = document.getElementById('output');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const clearBtn = document.getElementById('clearBtn');
+        const logOutput = document.getElementById('logOutput');
+        // const clearBtn = document.getElementById('clearBtn');
 
         let selectedProject = null;
+        let logEventSource = null;
 
-        // 加载项目列表
+        // Load project list
         async function loadProjects() {
             try {
                 const response = await fetch('/api/projects');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch projects');
+                }
                 const result = await response.json();
                 
                 projectsList.innerHTML = result.projects.map(project => `
@@ -86,39 +85,37 @@
             }
         }
 
-        // 选择项目
+        // Select project
         function selectProject(projectId, element) {
-            // 移除其他项目的选中状态
+            // Remove selection from other projects
             document.querySelectorAll('.project-card').forEach(card => {
                 card.classList.remove('selected');
             });
             
-            // 添加选中状态
+            // Add selection to the clicked project
             element.classList.add('selected');
             selectedProject = { id: projectId };
             
-            // 启用运行按钮和命令输入
+            // Enable run button and command input
             commandInput.disabled = false;
             updateRunButton();
         }
 
-        // 更新运行按钮状态
+        // Update run button state
         function updateRunButton() {
             runBtn.disabled = !selectedProject || !commandInput.value.trim();
         }
 
-        // 监听命令输入
+        // Listen for command input
         commandInput.addEventListener('input', updateRunButton);
 
-        // 运行项目
+        // Run project
         runBtn.addEventListener('click', async () => {
             if (!selectedProject || !commandInput.value.trim()) return;
 
             const command = commandInput.value.trim();
-            output.textContent = '运行中...\n';
             runBtn.disabled = true;
-            downloadBtn.disabled = true;
-            
+
             try {
                 const response = await fetch(`/api/run/${selectedProject.id}`, {
                     method: 'POST',
@@ -128,56 +125,44 @@
                     body: JSON.stringify({ command })
                 });
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                output.textContent = '';  // 清除"运行中..."的提示
-                
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    
-                    const text = decoder.decode(value);
-                    const lines = text.split('\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = JSON.parse(line.slice(6));
-                            
-                            if (data.type === 'end') {
-                                // 运行结束
-                                runBtn.disabled = false;
-                                const status = data.returncode === 0 ? '成功' : '失败';
-                                const statusLine = document.createElement('div');
-                                statusLine.className = data.returncode === 0 ? 'success-line' : 'error-line';
-                                statusLine.textContent = `\n运行${status}，耗时：${data.duration.toFixed(2)}秒`;
-                                output.appendChild(statusLine);
-                            } else {
-                                // 添加输出行
-                                const lineElem = document.createElement('div');
-                                lineElem.className = data.type === 'stderr' ? 'error-line' : 'output-line';
-                                lineElem.textContent = data.line;
-                                output.appendChild(lineElem);
-                                output.scrollTop = output.scrollHeight;
-                            }
-                        }
-                    }
+                const data = await response.json();
+                if (response.ok) {
+                    const runId = data.run_id; // Assume the backend returns the run_id
+                    startLogStream(runId); // Start streaming logs using run_id
+                } else {
+                    throw new Error(data.error || '运行失败');
                 }
             } catch (error) {
-                const errorLine = document.createElement('div');
-                errorLine.className = 'error-line';
-                errorLine.textContent = '错误：' + error.message;
-                output.appendChild(errorLine);
+                console.error('运行命令失败:', error);
                 runBtn.disabled = false;
             }
         });
 
-        // 清除输出
-        clearBtn.addEventListener('click', () => {
-            output.textContent = '';
-            downloadBtn.disabled = true;
-        });
+        // Clear log output
+        // clearBtn.addEventListener('click', () => {
+        //     logOutput.textContent = '';
+        // });
 
-        // 初始加载
+        // Start log streaming
+        function startLogStream(runId) {
+            if (logEventSource) {
+                logEventSource.close();
+            }
+
+            logEventSource = new EventSource(`/api/logs/${selectedProject.id}?run_id=${runId}`);
+            logEventSource.onmessage = function(event) {
+                const logLine = document.createElement('div');
+                logLine.textContent = event.data;
+                logOutput.appendChild(logLine);
+                logOutput.scrollTop = logOutput.scrollHeight;
+            };
+
+            logEventSource.onerror = function() {
+                logEventSource.close();
+            };
+        }
+
+        // Initial load
         loadProjects();
     </script>
 
@@ -250,7 +235,7 @@
             margin-top: 0.5rem;
         }
 
-        .output-content {
+        .log-content {
             background: #1e1e1e;
             color: #fff;
             padding: 1rem;
@@ -263,18 +248,6 @@
             word-wrap: break-word;
             font-size: 14px;
             line-height: 1.5;
-        }
-
-        .output-line {
-            color: #d4d4d4;
-        }
-
-        .error-line {
-            color: #ff6b6b;
-        }
-
-        .success-line {
-            color: #69db7c;
         }
     </style>
 </body>

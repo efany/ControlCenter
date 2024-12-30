@@ -45,6 +45,7 @@ RUN pip install --no-cache-dir openpyxl
 RUN pip install --no-cache-dir fsspec 
 RUN pip install --no-cache-dir numpy
 RUN pip install --no-cache-dir Pillow
+RUN pip install --no-cache-dir loguru
 
 # 设置工作目录
 WORKDIR /app
