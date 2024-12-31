@@ -101,6 +101,9 @@
                                 }
                             </div>
                             <div class="record-actions">
+                                <button onclick="rerunRecord(${record.id})" class="btn rerun-btn" title="使用相同配置再次运行">
+                                    <span class="btn-icon">🔄</span>再次执行
+                                </button>
                                 ${record.output_file ? `
                                     <a href="/api/records/${record.output_file}/download" 
                                        class="btn download-btn">下载产物</a>
@@ -167,6 +170,35 @@
                 }
             } catch (error) {
                 alert('终止失败: ' + error.message);
+            }
+        }
+
+        // 修改再次执行函数
+        async function rerunRecord(recordId) {
+            try {
+                // 获取记录详情
+                const response = await fetch(`/api/records/${recordId}`);
+                if (!response.ok) {
+                    throw new Error('获取记录详情失败');
+                }
+                const record = await response.json();
+
+                // 处理命令，移除输出目录和日志目录参数
+                let command = record.command;
+                command = command.replace(/\s+--output_dir\s+\S+/g, '');
+                command = command.replace(/\s+--log_dir\s+\S+/g, '');
+                command = command.trim();
+
+                // 将记录信息存储到 sessionStorage
+                sessionStorage.setItem('rerunConfig', JSON.stringify({
+                    projectId: record.project_id,
+                    command: command
+                }));
+
+                // 跳转到运行界面
+                window.location.href = '/runner';
+            } catch (error) {
+                alert('获取记录信息失败: ' + error.message);
             }
         }
     </script>

@@ -57,6 +57,7 @@
                 
                 projectsList.innerHTML = result.projects.map(project => `
                     <div class="project-card ${selectedProject?.id === project.id ? 'selected' : ''}" 
+                         data-project-id="${project.id}"
                          onclick="selectProject('${project.id}', this)">
                         <div class="project-header">
                             <span class="project-title">${project.title}</span>
@@ -133,6 +134,46 @@
 
         // Initial load
         loadProjects();
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 检查是否有重新运行的配置
+            const rerunConfig = sessionStorage.getItem('rerunConfig');
+            if (rerunConfig) {
+                const config = JSON.parse(rerunConfig);
+                
+                // 等待项目列表加载完成
+                await loadProjects();
+                
+                // 选中对应的项目
+                const projectCard = document.querySelector(`[data-project-id="${config.projectId}"]`);
+                if (projectCard) {
+                    // 触发项目选择
+                    selectProject(config.projectId, projectCard);
+                    
+                    // 填充命令
+                    commandInput.value = config.command;
+                    commandInput.disabled = false;
+                    
+                    // 启用运行按钮
+                    updateRunButton();
+                    
+                    // 滚动到命令输入区域
+                    document.querySelector('.run-options').scrollIntoView({ 
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    
+                    // 高亮命令输入框
+                    commandInput.classList.add('highlight');
+                    setTimeout(() => {
+                        commandInput.classList.remove('highlight');
+                    }, 2000);
+                }
+                
+                // 清除存储的配置
+                sessionStorage.removeItem('rerunConfig');
+            }
+        });
     </script>
 
     <style>

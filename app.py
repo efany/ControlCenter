@@ -1106,6 +1106,27 @@ def init_app():
     """
     check_running_tasks()
 
+@app.route('/api/records/<int:record_id>', methods=['GET'])
+def get_record(record_id):
+    """获取单条运行记录的详细信息"""
+    try:
+        conn = get_db()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                    SELECT * FROM run_records WHERE id = %s
+                ''', (record_id,))
+                record = cursor.fetchone()
+                
+                if not record:
+                    return jsonify({'error': 'Record not found'}), 404
+                
+                return jsonify(record)
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     init_app()
     app.run(host='0.0.0.0', port=5000) 
