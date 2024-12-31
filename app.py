@@ -66,6 +66,9 @@ running_processes = {}
 # Define the Beijing timezone
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
+# 全局变量，用于存储运行中的线程
+running_threads = {}
+
 def get_current_time():
     """Get the current time in Beijing timezone."""
     return datetime.now(beijing_tz)
@@ -109,6 +112,7 @@ def init_db():
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS run_records (
                     id INT AUTO_INCREMENT PRIMARY KEY,
+                    run_id VARCHAR(50) NOT NULL,
                     project_id VARCHAR(12) NOT NULL,
                     project_title VARCHAR(255) NOT NULL,
                     command TEXT NOT NULL,
@@ -768,7 +772,14 @@ def api_run_project(project_id):
 
         # Define the function to run in a background thread
         def run_command():
+            process = None
+            log_file = None
             try:
+                # Create log file
+                log_file_path = os.path.join(log_dir, 'app.log')
+                log_file = open(log_file_path, 'w', encoding='utf-8')
+                
+                # Start the process
                 process = subprocess.Popen(
                     full_command,
                     shell=False,
@@ -777,14 +788,38 @@ def api_run_project(project_id):
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
-                    universal_newlines=True
+                    universal_newlines=True,
+                    preexec_fn=os.setsid  # Create new process group
                 )
 
                 # Store the process in the running_processes dictionary
                 running_processes[record_id] = process
 
-                # Wait for the process to finish
-                process.wait()
+                # Monitor process output
+                while True:
+                    # Use select to monitor both stdout and stderr
+                    rlist, _, _ = select.select([process.stdout, process.stderr], [], [], 1.0)
+                    
+                    for pipe in rlist:
+                        line = pipe.readline()
+                        if line:
+                            log_file.write(line)
+                            log_file.flush()
+                    
+                    # Check if process has finished
+                    if process.poll() is not None:
+                        # Read any remaining output
+                        remaining_stdout, remaining_stderr = process.communicate()
+                        if remaining_stdout:
+                            log_file.write(remaining_stdout)
+                        if remaining_stderr:
+                            log_file.write(remaining_stderr)
+                        break
+                    
+                    # Flush log file periodically
+                    log_file.flush()
+
+                # Process has finished
                 duration = (get_current_time() - start_time).total_seconds()
 
                 # Update the run record status
@@ -803,14 +838,19 @@ def api_run_project(project_id):
                             record_id
                         ))
                     conn.commit()
-                except Exception as e:
-                    conn.rollback()
-                    raise Exception(f"Failed to update run record: {str(e)}")
                 finally:
                     conn.close()
 
             except Exception as e:
-                # Handle exceptions and update the database
+                # Log the error
+                if log_file:
+                    try:
+                        log_file.write(f"\nError in run_command: {str(e)}\n")
+                        log_file.flush()
+                    except:
+                        pass
+
+                # Update database with error status
                 conn = get_db()
                 try:
                     with conn.cursor() as cursor:
@@ -825,21 +865,45 @@ def api_run_project(project_id):
                             record_id
                         ))
                     conn.commit()
-                except Exception as e:
-                    conn.rollback()
-                    raise Exception(f"Failed to update error status: {str(e)}")
                 finally:
                     conn.close()
 
-        # Start the command in a background thread
+            finally:
+                # Clean up resources
+                if process and process.poll() is None:
+                    try:
+                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                    except:
+                        pass
+
+                if log_file:
+                    try:
+                        log_file.close()
+                    except:
+                        pass
+
+                # Remove process and thread references
+                if record_id in running_processes:
+                    del running_processes[record_id]
+                if run_id in running_threads:
+                    del running_threads[run_id]
+
+        # Create and start the thread
         thread = threading.Thread(target=run_command)
+        thread.daemon = False  # Ensure thread continues after main thread ends
         thread.start()
 
-        # Return the run_id in the response
-        return jsonify({'message': 'Command started successfully', 'run_id': run_id}), 200
+        # Store thread reference
+        running_threads[run_id] = thread
+
+        # Return immediately with run_id
+        return jsonify({
+            'message': 'Command started successfully',
+            'run_id': run_id
+        }), 200
 
     except Exception as e:
-        # If an error occurs after creating the record, update the record status
+        # Handle initial setup errors
         if 'record_id' in locals():
             conn = get_db()
             try:
@@ -981,10 +1045,11 @@ def insert_run_record(cursor, project_id, project_title, command_str, work_dir, 
     created_at = get_current_time()
     cursor.execute('''
         INSERT INTO run_records (
-            project_id, project_title, command, working_directory,
+            run_id, project_id, project_title, command, working_directory,
             status, running_status, output_file, duration, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ''', (
+        run_id,
         project_id,
         project_title,
         command_str,
@@ -995,42 +1060,6 @@ def insert_run_record(cursor, project_id, project_title, command_str, work_dir, 
         0.0,
         created_at
     ))
-
-@app.route('/api/logs/<project_id>', methods=['GET'])
-def stream_logs(project_id):
-    """Stream the log file content for a given project."""
-    try:
-        # Determine the log file path
-        run_id = request.args.get('run_id')
-        run_base_dir = os.path.join(app.config['DOWNLOAD_FOLDER'], run_id)
-        log_dir = os.path.join(os.path.abspath(run_base_dir), 'log')
-        log_file_path = os.path.join(log_dir, 'app.log')
-        
-        # Retry mechanism to wait for the log file to be created
-        max_retries = 10
-        retries = 0
-        while not os.path.exists(log_file_path) and retries < max_retries:
-            time.sleep(1)  # Wait for 1 second before retrying
-            retries += 1
-
-        if not os.path.exists(log_file_path):
-            return jsonify({'error': 'Log file not found', 'log_file_path': log_file_path}), 404
-
-        def generate():
-            with open(log_file_path, 'r', encoding='utf-8') as log_file:
-                # Move to the end of the file
-                log_file.seek(0, os.SEEK_END)
-                while True:
-                    line = log_file.readline()
-                    if line:
-                        yield f"data: {line}\n\n"
-                    else:
-                        time.sleep(1)  # Sleep briefly to avoid busy-waiting
-
-        return Response(generate(), mimetype='text/event-stream')
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000) 

@@ -379,4 +379,11 @@ body {
 .source-option input[type="radio"]:checked + span {
     color: #2196f3;
     font-weight: bold;
+}
+
+/* 更新runner-container的网格布局 */
+.runner-container {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 1.5rem;
 } 

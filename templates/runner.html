@@ -36,10 +36,6 @@
                     <button id="runBtn" class="btn" disabled>运行项目</button>
                 </div>
             </div>
-            <div class="log-container">
-                <h2>实时日志</h2>
-                <div class="log-content" id="logOutput"></div>
-            </div>
         </div>
     </div>
 
@@ -47,11 +43,8 @@
         const projectsList = document.getElementById('projectsList');
         const runBtn = document.getElementById('runBtn');
         const commandInput = document.getElementById('command');
-        const logOutput = document.getElementById('logOutput');
-        // const clearBtn = document.getElementById('clearBtn');
 
         let selectedProject = null;
-        let logEventSource = null;
 
         // Load project list
         async function loadProjects() {
@@ -127,8 +120,8 @@
 
                 const data = await response.json();
                 if (response.ok) {
-                    const runId = data.run_id; // Assume the backend returns the run_id
-                    startLogStream(runId); // Start streaming logs using run_id
+                    // const runId = data.run_id; // Assume the backend returns the run_id
+                    // startLogStream(runId); // Start streaming logs using run_id
                 } else {
                     throw new Error(data.error || '运行失败');
                 }
@@ -137,30 +130,6 @@
                 runBtn.disabled = false;
             }
         });
-
-        // Clear log output
-        // clearBtn.addEventListener('click', () => {
-        //     logOutput.textContent = '';
-        // });
-
-        // Start log streaming
-        function startLogStream(runId) {
-            if (logEventSource) {
-                logEventSource.close();
-            }
-
-            logEventSource = new EventSource(`/api/logs/${selectedProject.id}?run_id=${runId}`);
-            logEventSource.onmessage = function(event) {
-                const logLine = document.createElement('div');
-                logLine.textContent = event.data;
-                logOutput.appendChild(logLine);
-                logOutput.scrollTop = logOutput.scrollHeight;
-            };
-
-            logEventSource.onerror = function() {
-                logEventSource.close();
-            };
-        }
 
         // Initial load
         loadProjects();
@@ -233,21 +202,6 @@
 
         .project-type {
             margin-top: 0.5rem;
-        }
-
-        .log-content {
-            background: #1e1e1e;
-            color: #fff;
-            padding: 1rem;
-            border-radius: 4px;
-            font-family: monospace;
-            min-height: 200px;
-            max-height: 400px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 14px;
-            line-height: 1.5;
         }
     </style>
 </body>
