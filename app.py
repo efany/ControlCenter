@@ -1061,5 +1061,51 @@ def insert_run_record(cursor, project_id, project_title, command_str, work_dir, 
         created_at
     ))
 
+def check_running_tasks():
+    """
+    启动时检查所有运行中的任务，将其标记为中断
+    """
+    try:
+        conn = get_db()
+        try:
+            with conn.cursor() as cursor:
+                # 查找所有运行状态为 'running' 的记录
+                cursor.execute("""
+                    SELECT id, run_id, created_at 
+                    FROM run_records 
+                    WHERE running_status = 'running'
+                """)
+                running_records = cursor.fetchall()
+                
+                if running_records:
+                    # 更新这些记录的状态
+                    for record in running_records:
+                        # 计算运行时长（使用北京时间）
+                        start_time = beijing_tz.localize(record['created_at']) if record['created_at'].tzinfo is None else record['created_at']
+                        duration = (get_current_time() - start_time).total_seconds()
+                        
+                        # 更新记录状态
+                        cursor.execute("""
+                            UPDATE run_records 
+                            SET status = 'interrupted',
+                                running_status = 'completed',
+                                duration = %s
+                            WHERE id = %s
+                        """, (duration, record['id']))
+                    
+                    conn.commit()
+                    print(f"已将 {len(running_records)} 个运行中的任务标记为中断")
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"检查运行任务时出错: {str(e)}")
+
+def init_app():
+    """
+    应用初始化函数
+    """
+    check_running_tasks()
+
 if __name__ == '__main__':
+    init_app()
     app.run(host='0.0.0.0', port=5000) 

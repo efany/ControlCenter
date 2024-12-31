@@ -93,11 +93,12 @@
                         <div class="record-header">
                             <div class="record-title">
                                 <span class="project-title">${record.project_title}</span>
-                                <span class="status-badge ${record.status}">
-                                    ${record.status === 'success' ? '成功' : '失败'}
-                                </span>
                                 ${record.running_status === 'running' ? 
-                                    '<span class="running-badge">运行中</span>' : ''}
+                                    '<span class="running-badge">运行中</span>' :
+                                    `<span class="status-badge ${record.status}">
+                                        ${record.status === 'success' ? '成功' : '失败'}
+                                    </span>`
+                                }
                             </div>
                             <div class="record-actions">
                                 ${record.output_file ? `
