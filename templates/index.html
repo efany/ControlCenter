@@ -16,25 +16,116 @@
             <li><a href="/scheduler">任务配置</a></li>
         </ul>
     </nav>
+
     <div class="main-content">
-        <h1>欢迎使用Python项目管理系统</h1>
-        <div class="feature-grid">
-            <div class="feature-card">
-                <h2>项目管理</h2>
-                <p>上传和管理Python项目文件</p>
-                <a href="/projects" class="btn">进入管理</a>
+        <!-- 英雄区域 -->
+        <section class="hero">
+            <h1>Python项目管理与运行平台</h1>
+            <p class="hero-subtitle">一站式Python项目管理解决方案</p>
+            <div class="hero-actions">
+                <a href="/projects" class="btn primary">开始使用</a>
+                <a href="#features" class="btn secondary">了解更多</a>
             </div>
-            <div class="feature-card">
-                <h2>项目运行</h2>
-                <p>运行Python项目并下载结果</p>
-                <a href="/runner" class="btn">开始运行</a>
+        </section>
+
+        <!-- 主要特性 -->
+        <section id="features" class="features">
+            <h2 class="section-title">核心功能</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📦</div>
+                    <h3>项目管理</h3>
+                    <p>支持多种项目来源</p>
+                    <ul class="feature-list">
+                        <li>Git仓库自动同步</li>
+                        <li>本地文件上传</li>
+                        <li>版本控制集成</li>
+                        <li>文件管理系统</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>便捷运行</h3>
+                    <p>灵活的运行控制</p>
+                    <ul class="feature-list">
+                        <li>命令行参数配置</li>
+                        <li>实时状态监控</li>
+                        <li>运行结果导出</li>
+                        <li>一键终止操作</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>运行记录</h3>
+                    <p>完整的执行追踪</p>
+                    <ul class="feature-list">
+                        <li>详细运行日志</li>
+                        <li>执行状态跟踪</li>
+                        <li>运行时间统计</li>
+                        <li>结果文件管理</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⏰</div>
+                    <h3>定时任务</h3>
+                    <p>自动化任务调度</p>
+                    <ul class="feature-list">
+                        <li>Cron表达式支持</li>
+                        <li>定时执行管理</li>
+                        <li>执行结果通知</li>
+                        <li>任务依赖配置</li>
+                    </ul>
+                </div>
             </div>
-            <div class="feature-card">
-                <h2>任务配置</h2>
-                <p>设置定时任务自动运行</p>
-                <a href="/scheduler" class="btn">配置任务</a>
+        </section>
+
+        <!-- 技术特性 -->
+        <section class="tech-features">
+            <h2 class="section-title">技术特性</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <span class="tech-icon">🔒</span>
+                    <h4>安全可靠</h4>
+                    <p>进程隔离运行，安全防护机制</p>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">🚀</span>
+                    <h4>高性能</h4>
+                    <p>异步任务处理，资源智能调度</p>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">🔄</span>
+                    <h4>自动化</h4>
+                    <p>自动版本同步，定时任务执行</p>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">📱</span>
+                    <h4>响应式</h4>
+                    <p>支持多端访问，界面自适应</p>
+                </div>
             </div>
-        </div>
+        </section>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.feature-card, .tech-item');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, {
+                threshold: 0.1
+            });
+
+            cards.forEach(card => observer.observe(card));
+        });
+    </script>
 </body>
 </html> 
